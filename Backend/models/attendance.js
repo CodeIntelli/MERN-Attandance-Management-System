@@ -6,11 +6,16 @@ const attenDanceSchema = new mongoose.Schema({
     index: true,
     ref: "User",
   },
-  startDate: {
-    type: Date,
+  inTime: {
+    type: String,
+    default: new Date().toLocaleString(),
   },
-  endDate: {
-    type: Date,
+  outTime: {
+    type: String,
+    default: new Date().toLocaleString(),
+  },
+  timer: {
+    type: String,
   },
   createdAt: {
     type: Date,

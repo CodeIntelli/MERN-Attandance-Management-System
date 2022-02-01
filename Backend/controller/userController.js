@@ -1,26 +1,31 @@
 import { userModel } from "../models";
-import ErrorHandler from "../utils/errorHandler";
-import sendToken from "../utils/jwtToken";
-import sendEmail from "../utils/sendEmail";
+import { ErrorHandler, sendToken, sendEmail } from "../utils";
+import { FRONTEND_URL } from "../config";
 import crypto from "crypto";
-
+import cloudinary from "cloudinary";
 const userController = {
   async registerUser(req, res, next) {
     try {
+      const myCloud = await cloudinary.v2.uploader.upload(req.body.avatar, {
+        folder: "attandaceProfile",
+        width: 150,
+        crop: "scale",
+      });
+
       const { name, email, password } = req.body;
+
       const user = await userModel.create({
-        name,
+        name: req.body.name.trim(),
         email,
         password,
         avatar: {
-          public_id: "this is sample id",
-          url: "profile pic",
+          public_id: myCloud.public_id,
+          url: myCloud.secure_url,
         },
       });
-
       sendToken(user, 201, res);
-    } catch (err) {
-      return next(new ErrorHandler(err, 500));
+    } catch (error) {
+      return next(new ErrorHandler(error, 500));
     }
   },
 
@@ -37,24 +42,29 @@ const userController = {
         return next(new ErrorHandler("Invalid Email and password", 400));
       }
       const isPasswordMatched = await user.comparePassword(password);
-      console.log(isPasswordMatched);
       if (!isPasswordMatched) {
         return next(new ErrorHandler("Invalid Email and password", 400));
       }
       const token = user.getJWTToken();
       sendToken(user, 200, res);
-    } catch (err) {}
+    } catch (error) {
+      return next(new ErrorHandler(error, 500));
+    }
   },
 
   async logout(req, res, next) {
-    res.cookie("token", null, {
-      expires: new Date(Date.now()),
-      httpOnly: true,
-    });
-    res.status(200).json({
-      success: true,
-      msg: "Successfully Logout",
-    });
+    try {
+      res.cookie("token", null, {
+        expires: new Date(Date.now()),
+        httpOnly: true,
+      });
+      res.status(200).json({
+        success: true,
+        message: "Successfully Logout",
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error });
+    }
   },
   async forgotPassword(req, res, next) {
     const user = await userModel.findOne({ email: req.body.email });
@@ -64,9 +74,7 @@ const userController = {
     const resetToken = user.getResetPasswordToken();
     await user.save({ validateBeforeSave: false });
 
-    const resetPasswordUrl = `${req.protocol}://${req.get(
-      "host"
-    )}/api/v1/password/reset/${resetToken}`;
+    const resetPasswordUrl = `${FRONTEND_URL}/password/reset/${resetToken}`;
 
     const message = `Your password reset token is:- ${resetPasswordUrl} \n\n If you have not requested this email then please ignore it\n\n `;
 
@@ -79,24 +87,21 @@ const userController = {
       res.status(200).json({
         success: true,
         message: `Email sent to ${user.email} successfully`,
-        message,
       });
-    } catch (err) {
+    } catch (error) {
       user.resetPasswordToken = undefined;
       user.resetPasswordExpire = undefined;
       await user.save({ validateBeforeSave: false });
-      return next(new ErrorHandler(err.message, 500));
+      return next(new ErrorHandler(error.message, 500));
     }
   },
 
   async resetPassword(req, res, next) {
     try {
-      // console.log(req.params.token);
       const resetPasswordToken = crypto
         .createHash("sha256")
         .update(req.params.token)
         .digest("hex");
-      // console.log(`reset password token: ${resetPasswordToken}`);
       const user = await userModel.findOne({
         resetPasswordToken,
         resetPasswordExpire: { $gt: Date.now() },
@@ -118,19 +123,25 @@ const userController = {
       user.resetPasswordExpire = undefined;
       await user.save();
       sendToken(user, 200, res);
-    } catch (err) {
-      res.status(500).json({ success: false, msg: err.msg });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
     }
   },
-  // if authenticated
   async getUserDetails(req, res, next) {
-    const user = await userModel.findById(req.user.id);
-    res.status(200).json({ success: true, user });
+    try {
+      const user = await userModel.findById(req.user.id);
+      res.status(200).json({ success: true, user });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
   },
-  // if authenticated - admin
   async getAllUserDetails(req, res, next) {
-    const user = await userModel.find();
-    res.status(200).json({ success: true, user });
+    try {
+      const users = await userModel.find();
+      res.status(200).json({ success: true, users });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
   },
   // if authenticated
   async updatePassword(req, res, next) {
@@ -150,8 +161,8 @@ const userController = {
       await user.save();
       sendToken(user, 200, res);
       res.status(200).json({ success: true, user });
-    } catch (err) {
-      return new ErrorHandler(err, 500);
+    } catch (error) {
+      return new ErrorHandler(error, 500);
     }
   },
   // get single user - admin
@@ -169,8 +180,8 @@ const userController = {
         success: true,
         user,
       });
-    } catch (err) {
-      return new ErrorHandler(err, 500);
+    } catch (error) {
+      return new ErrorHandler(error, 500);
     }
   },
   async updateUserRole(req, res, next) {
@@ -181,7 +192,6 @@ const userController = {
         role: req.body.role,
       };
 
-      // console.log(newUserData);
       await userModel.findByIdAndUpdate(req.params.id, newUserData, {
         new: true,
         runValidators: true,
@@ -191,8 +201,8 @@ const userController = {
       res.status(200).json({
         success: true,
       });
-    } catch (err) {
-      return new ErrorHandler(err, 500);
+    } catch (error) {
+      return new ErrorHandler(error, 500);
     }
   },
 
@@ -202,6 +212,24 @@ const userController = {
         name: req.body.name,
         email: req.body.email,
       };
+      if (req.body.avatar !== "") {
+        const user = await userModel.findById(req.user.id);
+
+        const imageId = user.avatar.public_id;
+
+        await cloudinary.v2.uploader.destroy(imageId);
+
+        const myCloud = await cloudinary.v2.uploader.upload(req.body.avatar, {
+          folder: "attandaceProfile",
+          width: 150,
+          crop: "scale",
+        });
+
+        newUserData.avatar = {
+          public_id: myCloud.public_id,
+          url: myCloud.secure_url,
+        };
+      }
 
       const user = await userModel.findByIdAndUpdate(req.user.id, newUserData, {
         new: true,
@@ -212,15 +240,16 @@ const userController = {
       res.status(200).json({
         success: true,
       });
+
       next();
-    } catch (err) {
-      return new ErrorHandler(err, 500);
+    } catch (error) {
+      return new ErrorHandler(error, 500);
     }
   },
 
   async deleteUser(req, res, next) {
     try {
-      const user = await User.findById(req.params.id);
+      const user = await userModel.findById(req.params.id);
 
       if (!user) {
         return next(
@@ -234,8 +263,8 @@ const userController = {
         success: true,
         message: "User Deleted Successfully",
       });
-    } catch (err) {
-      return new ErrorHandler(err, 500);
+    } catch (error) {
+      return new ErrorHandler(error, 500);
     }
   },
 };

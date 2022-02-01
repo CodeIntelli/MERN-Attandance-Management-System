@@ -1,5 +1,4 @@
 import nodeMailer from "nodemailer";
-// import { google } from "googleapis";
 import {
   SMTP_MAIL,
   SMTP_SERVICE,

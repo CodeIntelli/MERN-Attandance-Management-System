@@ -1,6 +1,6 @@
 import express from "express";
 let routes = express.Router();
-import { userController, attenDanceController } from "../controller";
+import { userController, attandanceController } from "../controller";
 import { isAuthenticatedUser, authorizationRoles } from "../middleware/auth";
 
 // User Routes
@@ -48,13 +48,42 @@ routes.delete(
   userController.deleteUser
 );
 routes.post(
-  "/attendees/inOut",
+  "/attendances/new",
   isAuthenticatedUser,
-  attenDanceController.createAttenDance
+  attandanceController.createAttendance
 );
-routes.post(
-  "/attendees/get",
+routes.get(
+  "/attendances",
   isAuthenticatedUser,
-  attenDanceController.getAttendance
+  attandanceController.loginUserAttendance
 );
+routes.get(
+  "/attendances/:id",
+  isAuthenticatedUser,
+  authorizationRoles("admin"),
+  attandanceController.specificAttendance
+);
+
+routes.get(
+  "/records",
+  isAuthenticatedUser,
+  authorizationRoles("admin"),
+  attandanceController.allUserAttendance
+);
+
+// routes.post(
+//   "/attendees/out",
+//   isAuthenticatedUser,
+//   attenDanceController.outAttendance
+// );
+// routes.post(
+//   "/attendees/get",
+//   isAuthenticatedUser,
+//   attenDanceController.getAttendance
+// );
+// routes.post(
+//   "/attendees/list",
+//   isAuthenticatedUser,
+//   attenDanceController.attendanceList
+// );
 export default routes;
